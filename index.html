@@ -53,6 +53,12 @@
         button:active {
             transform: scale(0.98);
         }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
         .location-info {
             margin-top: 30px;
             background-color: rgba(255, 255, 255, 0.1);
@@ -96,6 +102,12 @@
         .info-value {
             font-size: 1.5rem;
         }
+        .weather-icon {
+            width: 50px;
+            height: 50px;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
         .map-container {
             margin-top: 20px;
             border-radius: 10px;
@@ -128,12 +140,52 @@
             background-color: rgba(255, 0, 0, 0.1);
             border-radius: 5px;
         }
+        .api-status {
+            font-size: 0.8rem;
+            color: #aaa;
+            margin-top: 20px;
+        }
+        .api-key-form {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .api-key-input {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            width: 100%;
+            max-width: 400px;
+            margin-bottom: 10px;
+        }
+        .api-key-button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Random World Location Explorer</h1>
         <p>Click the button below to discover a random location around the world and learn about the current time and weather there.</p>
+        
+        <div id="apiKeySection" class="api-key-form">
+            <p>To use real-time weather data, you need an OpenWeatherMap API key.</p>
+            <p>Get a free API key at <a href="https://openweathermap.org/api" target="_blank" style="color: #4CAF50;">OpenWeatherMap</a></p>
+            <input type="text" id="apiKeyInput" class="api-key-input" placeholder="Enter your OpenWeatherMap API key">
+            <button id="saveApiKeyButton" class="api-key-button">Save API Key</button>
+        </div>
         
         <div class="button-container">
             <button id="exploreButton">Explore New Location</button>
@@ -152,7 +204,10 @@
                 </div>
                 <div class="info-card">
                     <div class="info-title">Weather</div>
-                    <div class="info-value" id="weather">--°C</div>
+                    <div class="info-value" id="weather">
+                        <img id="weatherIcon" class="weather-icon" src="" alt="Weather">
+                        <span id="weatherText">--°C</span>
+                    </div>
                 </div>
                 <div class="info-card">
                     <div class="info-title">Coordinates</div>
@@ -168,6 +223,8 @@
                 <iframe id="map" frameborder="0" scrolling="no" marginheight="0" marginwidth="0"></iframe>
             </div>
         </div>
+        
+        <div class="api-status" id="apiStatus"></div>
     </div>
 
     <script>
@@ -177,54 +234,84 @@
             const locationName = document.getElementById('locationName');
             const localTime = document.getElementById('localTime');
             const weather = document.getElementById('weather');
+            const weatherText = document.getElementById('weatherText');
+            const weatherIcon = document.getElementById('weatherIcon');
             const coordinates = document.getElementById('coordinates');
             const country = document.getElementById('country');
             const map = document.getElementById('map');
             const loading = document.getElementById('loading');
             const errorMessage = document.getElementById('errorMessage');
+            const apiStatus = document.getElementById('apiStatus');
+            const apiKeySection = document.getElementById('apiKeySection');
+            const apiKeyInput = document.getElementById('apiKeyInput');
+            const saveApiKeyButton = document.getElementById('saveApiKeyButton');
+            
+            let weatherApiKey = localStorage.getItem('weatherApiKey') || '';
+            
+            // Check if API key is stored
+            if (weatherApiKey) {
+                apiKeyInput.value = weatherApiKey;
+                apiKeySection.classList.add('hidden');
+            }
+            
+            // Save API key to local storage
+            saveApiKeyButton.addEventListener('click', () => {
+                const keyValue = apiKeyInput.value.trim();
+                if (keyValue) {
+                    localStorage.setItem('weatherApiKey', keyValue);
+                    weatherApiKey = keyValue;
+                    apiKeySection.classList.add('hidden');
+                    apiStatus.textContent = 'API key saved successfully!';
+                    setTimeout(() => {
+                        apiStatus.textContent = '';
+                    }, 3000);
+                } else {
+                    apiStatus.textContent = 'Please enter a valid API key.';
+                }
+            });
             
             // List of major cities around the world
             const cities = [
-                { name: "Tokyo", lat: 35.6762, lon: 139.6503, country: "Japan" },
-                { name: "New York", lat: 40.7128, lon: -74.0060, country: "United States" },
-                { name: "London", lat: 51.5074, lon: -0.1278, country: "United Kingdom" },
-                { name: "Paris", lat: 48.8566, lon: 2.3522, country: "France" },
-                { name: "Sydney", lat: 33.8688, lon: 151.2093, country: "Australia" },
-                { name: "Rio de Janeiro", lat: -22.9068, lon: -43.1729, country: "Brazil" },
-                { name: "Cairo", lat: 30.0444, lon: 31.2357, country: "Egypt" },
-                { name: "Mumbai", lat: 19.0760, lon: 72.8777, country: "India" },
-                { name: "Beijing", lat: 39.9042, lon: 116.4074, country: "China" },
-                { name: "Cape Town", lat: -33.9249, lon: 18.4241, country: "South Africa" },
-                { name: "Moscow", lat: 55.7558, lon: 37.6173, country: "Russia" },
-                { name: "Mexico City", lat: 19.4326, lon: -99.1332, country: "Mexico" },
-                { name: "Bangkok", lat: 13.7563, lon: 100.5018, country: "Thailand" },
-                { name: "Buenos Aires", lat: -34.6037, lon: -58.3816, country: "Argentina" },
-                { name: "Berlin", lat: 52.5200, lon: 13.4050, country: "Germany" },
-                { name: "Toronto", lat: 43.6532, lon: -79.3832, country: "Canada" },
-                { name: "Singapore", lat: 1.3521, lon: 103.8198, country: "Singapore" },
-                { name: "Istanbul", lat: 41.0082, lon: 28.9784, country: "Turkey" },
-                { name: "Dubai", lat: 25.2048, lon: 55.2708, country: "UAE" },
-                { name: "Los Angeles", lat: 34.0522, lon: -118.2437, country: "United States" },
-                { name: "Barcelona", lat: 41.3851, lon: 2.1734, country: "Spain" },
-                { name: "Seoul", lat: 37.5665, lon: 126.9780, country: "South Korea" },
-                { name: "Auckland", lat: -36.8509, lon: 174.7645, country: "New Zealand" },
-                { name: "Nairobi", lat: -1.2921, lon: 36.8219, country: "Kenya" },
-                { name: "Stockholm", lat: 59.3293, lon: 18.0686, country: "Sweden" },
-                { name: "Lima", lat: -12.0464, lon: -77.0428, country: "Peru" },
-                { name: "Lisbon", lat: 38.7223, lon: -9.1393, country: "Portugal" },
-                { name: "Vienna", lat: 48.2082, lon: 16.3738, country: "Austria" },
-                { name: "Helsinki", lat: 60.1699, lon: 24.9384, country: "Finland" },
-                { name: "Havana", lat: 23.1136, lon: -82.3666, country: "Cuba" },
-                { name: "Reykjavik", lat: 64.1466, lon: -21.9426, country: "Iceland" },
-                { name: "Marrakesh", lat: 31.6295, lon: -7.9811, country: "Morocco" },
-                { name: "Vancouver", lat: 49.2827, lon: -123.1207, country: "Canada" },
-                { name: "Amsterdam", lat: 52.3676, lon: 4.9041, country: "Netherlands" },
-                { name: "Copenhagen", lat: 55.6761, lon: 12.5683, country: "Denmark" },
-                { name: "Dublin", lat: 53.3498, lon: -6.2603, country: "Ireland" },
-                { name: "Prague", lat: 50.0755, lon: 14.4378, country: "Czech Republic" },
-                { name: "Zurich", lat: 47.3769, lon: 8.5417, country: "Switzerland" },
-                { name: "Athens", lat: 37.9838, lon: 23.7275, country: "Greece" },
-                { name: "Rome", lat: 41.9028, lon: 12.4964, country: "Italy" }
+                { name: "Tokyo", lat: 35.6762, lon: 139.6503, country: "Japan", timezone: "Asia/Tokyo" },
+                { name: "New York", lat: 40.7128, lon: -74.0060, country: "United States", timezone: "America/New_York" },
+                { name: "London", lat: 51.5074, lon: -0.1278, country: "United Kingdom", timezone: "Europe/London" },
+                { name: "Paris", lat: 48.8566, lon: 2.3522, country: "France", timezone: "Europe/Paris" },
+                { name: "Sydney", lat: -33.8688, lon: 151.2093, country: "Australia", timezone: "Australia/Sydney" },
+                { name: "Rio de Janeiro", lat: -22.9068, lon: -43.1729, country: "Brazil", timezone: "America/Sao_Paulo" },
+                { name: "Cairo", lat: 30.0444, lon: 31.2357, country: "Egypt", timezone: "Africa/Cairo" },
+                { name: "Mumbai", lat: 19.0760, lon: 72.8777, country: "India", timezone: "Asia/Kolkata" },
+                { name: "Beijing", lat: 39.9042, lon: 116.4074, country: "China", timezone: "Asia/Shanghai" },
+                { name: "Cape Town", lat: -33.9249, lon: 18.4241, country: "South Africa", timezone: "Africa/Johannesburg" },
+                { name: "Moscow", lat: 55.7558, lon: 37.6173, country: "Russia", timezone: "Europe/Moscow" },
+                { name: "Mexico City", lat: 19.4326, lon: -99.1332, country: "Mexico", timezone: "America/Mexico_City" },
+                { name: "Bangkok", lat: 13.7563, lon: 100.5018, country: "Thailand", timezone: "Asia/Bangkok" },
+                { name: "Buenos Aires", lat: -34.6037, lon: -58.3816, country: "Argentina", timezone: "America/Argentina/Buenos_Aires" },
+                { name: "Berlin", lat: 52.5200, lon: 13.4050, country: "Germany", timezone: "Europe/Berlin" },
+                { name: "Toronto", lat: 43.6532, lon: -79.3832, country: "Canada", timezone: "America/Toronto" },
+                { name: "Singapore", lat: 1.3521, lon: 103.8198, country: "Singapore", timezone: "Asia/Singapore" },
+                { name: "Istanbul", lat: 41.0082, lon: 28.9784, country: "Turkey", timezone: "Europe/Istanbul" },
+                { name: "Dubai", lat: 25.2048, lon: 55.2708, country: "UAE", timezone: "Asia/Dubai" },
+                { name: "Los Angeles", lat: 34.0522, lon: -118.2437, country: "United States", timezone: "America/Los_Angeles" },
+                { name: "Barcelona", lat: 41.3851, lon: 2.1734, country: "Spain", timezone: "Europe/Madrid" },
+                { name: "Seoul", lat: 37.5665, lon: 126.9780, country: "South Korea", timezone: "Asia/Seoul" },
+                { name: "Auckland", lat: -36.8509, lon: 174.7645, country: "New Zealand", timezone: "Pacific/Auckland" },
+                { name: "Nairobi", lat: -1.2921, lon: 36.8219, country: "Kenya", timezone: "Africa/Nairobi" },
+                { name: "Stockholm", lat: 59.3293, lon: 18.0686, country: "Sweden", timezone: "Europe/Stockholm" },
+                { name: "Lima", lat: -12.0464, lon: -77.0428, country: "Peru", timezone: "America/Lima" },
+                { name: "Lisbon", lat: 38.7223, lon: -9.1393, country: "Portugal", timezone: "Europe/Lisbon" },
+                { name: "Vienna", lat: 48.2082, lon: 16.3738, country: "Austria", timezone: "Europe/Vienna" },
+                { name: "Helsinki", lat: 60.1699, lon: 24.9384, country: "Finland", timezone: "Europe/Helsinki" },
+                { name: "Havana", lat: 23.1136, lon: -82.3666, country: "Cuba", timezone: "America/Havana" },
+                { name: "Reykjavik", lat: 64.1466, lon: -21.9426, country: "Iceland", timezone: "Atlantic/Reykjavik" },
+                { name: "Marrakesh", lat: 31.6295, lon: -7.9811, country: "Morocco", timezone: "Africa/Casablanca" },
+                { name: "Vancouver", lat: 49.2827, lon: -123.1207, country: "Canada", timezone: "America/Vancouver" },
+                { name: "Amsterdam", lat: 52.3676, lon: 4.9041, country: "Netherlands", timezone: "Europe/Amsterdam" },
+                { name: "Copenhagen", lat: 55.6761, lon: 12.5683, country: "Denmark", timezone: "Europe/Copenhagen" },
+                { name: "Dublin", lat: 53.3498, lon: -6.2603, country: "Ireland", timezone: "Europe/Dublin" },
+                { name: "Prague", lat: 50.0755, lon: 14.4378, country: "Czech Republic", timezone: "Europe/Prague" },
+                { name: "Zurich", lat: 47.3769, lon: 8.5417, country: "Switzerland", timezone: "Europe/Zurich" },
+                { name: "Athens", lat: 37.9838, lon: 23.7275, country: "Greece", timezone: "Europe/Athens" },
+                { name: "Rome", lat: 41.9028, lon: 12.4964, country: "Italy", timezone: "Europe/Rome" }
             ];
             
             // Function to get a random city
@@ -239,8 +326,29 @@
                 return `${Math.abs(lat).toFixed(2)}° ${latDir}, ${Math.abs(lon).toFixed(2)}° ${lonDir}`;
             }
             
-            // Function to get local time for a location
-            function getLocalTime(lat, lon) {
+            // Function to get real local time for a location using WorldTimeAPI
+            async function getLocalTime(timezone) {
+                try {
+                    const response = await fetch(`https://worldtimeapi.org/api/timezone/${timezone}`);
+                    const data = await response.json();
+                    
+                    // Parse the datetime string
+                    const dateTime = new Date(data.datetime);
+                    
+                    // Format the time (HH:MM)
+                    const hours = dateTime.getHours().toString().padStart(2, '0');
+                    const minutes = dateTime.getMinutes().toString().padStart(2, '0');
+                    
+                    return `${hours}:${minutes}`;
+                } catch (error) {
+                    console.error('Error fetching local time:', error);
+                    // Fallback to approximate time calculation
+                    return getFallbackTime(city.lat, city.lon);
+                }
+            }
+            
+            // Fallback function for time calculation if API fails
+            function getFallbackTime(lat, lon) {
                 // Calculate rough time zone offset based on longitude
                 // Each 15 degrees of longitude represents approximately 1 hour time difference
                 const offsetHours = Math.round(lon / 15);
@@ -254,15 +362,44 @@
                 return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             }
             
-            // Function to generate mock weather data
-            function generateWeather() {
+            // Function to get real weather data for a location using OpenWeatherMap API
+            async function getWeatherData(lat, lon, apiKey) {
+                if (!apiKey) {
+                    throw new Error('No API key provided');
+                }
+                
+                try {
+                    const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}`);
+                    const data = await response.json();
+                    
+                    if (data.cod !== 200) {
+                        throw new Error(data.message || 'Error fetching weather data');
+                    }
+                    
+                    return {
+                        temperature: Math.round(data.main.temp),
+                        condition: data.weather[0].description,
+                        icon: `https://openweathermap.org/img/wn/${data.weather[0].icon}@2x.png`
+                    };
+                } catch (error) {
+                    console.error('Error fetching weather data:', error);
+                    throw error;
+                }
+            }
+            
+            // Function to generate mock weather data (fallback)
+            function generateMockWeather() {
                 const conditions = ["Sunny", "Partly Cloudy", "Cloudy", "Rainy", "Stormy", "Snowy", "Clear", "Foggy", "Windy"];
                 const condition = conditions[Math.floor(Math.random() * conditions.length)];
                 
                 // Generate random temperature between -10°C and 40°C
                 const temperature = Math.floor(Math.random() * 50) - 10;
                 
-                return `${temperature}°C, ${condition}`;
+                return {
+                    temperature,
+                    condition,
+                    icon: 'https://openweathermap.org/img/wn/01d@2x.png' // Default sunny icon
+                };
             }
             
             // Function to update the iframe map
@@ -272,37 +409,74 @@
             }
             
             // Event listener for the explore button
-            exploreButton.addEventListener('click', () => {
+            exploreButton.addEventListener('click', async () => {
+                // Check if API key is available
+                if (!weatherApiKey) {
+                    apiKeySection.classList.remove('hidden');
+                    apiStatus.textContent = 'Please enter an OpenWeatherMap API key to continue.';
+                    return;
+                }
+                
+                // Disable button during loading
+                exploreButton.disabled = true;
+                
                 // Show loading
                 loading.style.display = 'block';
                 errorMessage.style.display = 'none';
                 locationInfo.classList.remove('active');
+                apiStatus.textContent = '';
                 
-                // Simulate network delay
-                setTimeout(() => {
+                try {
+                    const city = getRandomCity();
+                    
+                    // Update location name and country
+                    locationName.textContent = city.name;
+                    country.textContent = city.country;
+                    coordinates.textContent = formatCoordinates(city.lat, city.lon);
+                    
+                    // Update map
+                    updateMap(city.lat, city.lon);
+                    
+                    // Fetch real time data
                     try {
-                        const city = getRandomCity();
-                        
-                        // Update UI
-                        locationName.textContent = city.name;
-                        localTime.textContent = getLocalTime(city.lat, city.lon);
-                        weather.textContent = generateWeather();
-                        coordinates.textContent = formatCoordinates(city.lat, city.lon);
-                        country.textContent = city.country;
-                        
-                        // Update map
-                        updateMap(city.lat, city.lon);
-                        
-                        // Hide loading and show results
-                        loading.style.display = 'none';
-                        locationInfo.classList.add('active');
-                    } catch (error) {
-                        // Show error message
-                        loading.style.display = 'none';
-                        errorMessage.style.display = 'block';
-                        console.error("Error generating location:", error);
+                        const time = await getLocalTime(city.timezone);
+                        localTime.textContent = time;
+                        apiStatus.textContent += 'Real time data loaded. ';
+                    } catch (timeError) {
+                        console.error('Time API error:', timeError);
+                        localTime.textContent = getFallbackTime(city.lat, city.lon);
+                        apiStatus.textContent += 'Using estimated time (API error). ';
                     }
-                }, 1500);
+                    
+                    // Fetch real weather data
+                    try {
+                        const weatherData = await getWeatherData(city.lat, city.lon, weatherApiKey);
+                        weatherText.textContent = `${weatherData.temperature}°C, ${weatherData.condition}`;
+                        weatherIcon.src = weatherData.icon;
+                        weatherIcon.alt = weatherData.condition;
+                        apiStatus.textContent += 'Real weather data loaded.';
+                    } catch (weatherError) {
+                        console.error('Weather API error:', weatherError);
+                        const mockWeather = generateMockWeather();
+                        weatherText.textContent = `${mockWeather.temperature}°C, ${mockWeather.condition}`;
+                        weatherIcon.src = mockWeather.icon;
+                        weatherIcon.alt = mockWeather.condition;
+                        apiStatus.textContent += 'Using simulated weather (API error).';
+                    }
+                    
+                    // Hide loading and show results
+                    loading.style.display = 'none';
+                    locationInfo.classList.add('active');
+                } catch (error) {
+                    // Show error message
+                    loading.style.display = 'none';
+                    errorMessage.style.display = 'block';
+                    errorMessage.textContent = `Error: ${error.message}`;
+                    console.error("Error generating location:", error);
+                } finally {
+                    // Re-enable button
+                    exploreButton.disabled = false;
+                }
             });
         });
     </script>
